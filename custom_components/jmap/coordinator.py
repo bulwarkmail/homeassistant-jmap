@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from datetime import timedelta
 from typing import Any
 
@@ -19,6 +20,7 @@ from .const import (
     EVENT_EMAIL_DELETED,
     EVENT_MAILBOX_CHANGED,
     EVENT_NEW_EMAIL,
+    ROLE_INBOX,
 )
 from .jmap_client import (
     Email,
@@ -30,6 +32,35 @@ from .jmap_client import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_KNOWN_EMAIL_ID_CAP = 1000
+
+
+class _BoundedIdSet:
+    """Set with FIFO eviction so a long-lived account doesn't grow unbounded."""
+
+    def __init__(self, cap: int) -> None:
+        self._cap = cap
+        self._set: set[str] = set()
+        self._order: deque[str] = deque()
+
+    def __contains__(self, item: str) -> bool:
+        return item in self._set
+
+    def add(self, item: str) -> None:
+        if item in self._set:
+            return
+        self._set.add(item)
+        self._order.append(item)
+        while len(self._order) > self._cap:
+            old = self._order.popleft()
+            self._set.discard(old)
+
+    def replace(self, items: set[str]) -> None:
+        self._set = set()
+        self._order.clear()
+        for item in items:
+            self.add(item)
 
 
 class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -48,8 +79,7 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._use_push = bool(options.get(CONF_USE_PUSH, DEFAULT_USE_PUSH))
         self._email_state: str | None = None
         self._push_task: asyncio.Task[None] | None = None
-        self._push_wake: asyncio.Event = asyncio.Event()
-        self._known_email_ids: set[str] = set()
+        self._known_email_ids: _BoundedIdSet = _BoundedIdSet(_KNOWN_EMAIL_ID_CAP)
         super().__init__(
             hass,
             _LOGGER,
@@ -64,13 +94,13 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mailboxes = await self.client.list_mailboxes(force_refresh=True)
             self._email_state = await self.client.get_state()
             inbox = next(
-                (mb for mb in mailboxes.values() if mb.role == "inbox"), None
+                (mb for mb in mailboxes.values() if mb.role == ROLE_INBOX), None
             )
             if inbox is not None:
                 latest = await self.client.query_emails(
                     mailbox_id=inbox.id, limit=50
                 )
-                self._known_email_ids = {e.id for e in latest}
+                self._known_email_ids.replace({e.id for e in latest})
         except JMAPAuthError as err:
             raise ConfigEntryAuthFailedShim(str(err)) from err
         except JMAPError as err:
@@ -80,24 +110,32 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_shutdown(self) -> None:
         if self._push_task is not None:
-            self._push_task.cancel()
-            try:
-                await self._push_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
+            task = self._push_task
             self._push_task = None
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("JMAP push task raised during shutdown")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Single tick: refresh mailbox counts and detect new emails."""
         try:
             mailboxes = await self.client.list_mailboxes(force_refresh=True)
             new_emails: list[Email] = []
+            destroyed_ids: list[str] = []
             if self._email_state is not None:
                 try:
-                    new_state, created, _updated = await self.client.email_changes(
-                        self._email_state
-                    )
+                    (
+                        new_state,
+                        created,
+                        _updated,
+                        destroyed,
+                    ) = await self.client.email_changes(self._email_state)
                     self._email_state = new_state
+                    destroyed_ids = destroyed
                     if created:
                         fetched = await self.client.get_emails(created)
                         for email in fetched:
@@ -116,11 +154,11 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 self._email_state = await self.client.get_state()
 
-            self._fire_events(new_emails, mailboxes)
+            self._fire_events(new_emails, destroyed_ids, mailboxes)
 
             latest_unread: list[Email] = []
             inbox = next(
-                (mb for mb in mailboxes.values() if mb.role == "inbox"), None
+                (mb for mb in mailboxes.values() if mb.role == ROLE_INBOX), None
             )
             if inbox is not None:
                 latest_unread = await self.client.query_emails(
@@ -138,7 +176,10 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(str(err)) from err
 
     def _fire_events(
-        self, new_emails: list[Email], mailboxes: dict[str, Mailbox]
+        self,
+        new_emails: list[Email],
+        destroyed_ids: list[str],
+        mailboxes: dict[str, Mailbox],
     ) -> None:
         for email in new_emails:
             payload = {
@@ -153,6 +194,16 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     mailbox_names.append(mb.name)
             payload["mailbox_names"] = mailbox_names
             self.hass.bus.async_fire(EVENT_NEW_EMAIL, payload)
+
+        for email_id in destroyed_ids:
+            self.hass.bus.async_fire(
+                EVENT_EMAIL_DELETED,
+                {
+                    "account": self.entry.title,
+                    "entry_id": self.entry.entry_id,
+                    "email_id": email_id,
+                },
+            )
 
         if self.data is not None:
             prev_boxes: dict[str, Mailbox] = self.data.get("mailboxes", {}) or {}

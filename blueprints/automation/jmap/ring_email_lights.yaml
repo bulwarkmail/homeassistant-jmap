@@ -28,6 +28,10 @@ blueprint:
       selector:
         text:
 
+variables:
+  sender_substring: !input sender_substring
+  subject_contains: !input subject_contains
+
 trigger:
   - platform: event
     event_type: jmap_new_email
@@ -37,8 +41,8 @@ condition:
     value_template: >
       {% set f = trigger.event.data.from | join(' ') | lower %}
       {% set s = trigger.event.data.subject | lower %}
-      {{ (!input sender_substring) | lower in f
-         and (!input subject_contains) | lower in s }}
+      {{ sender_substring | lower in f
+         and subject_contains | lower in s }}
 
 action:
   - service: light.turn_on

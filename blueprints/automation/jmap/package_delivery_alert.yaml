@@ -41,6 +41,11 @@ blueprint:
       selector:
         text:
 
+variables:
+  senders: !input sender_patterns
+  kws: !input subject_keywords
+  notify_target: !input notify_target
+
 trigger:
   - platform: event
     event_type: jmap_new_email
@@ -48,8 +53,6 @@ trigger:
 condition:
   - condition: template
     value_template: >
-      {% set senders = !input sender_patterns %}
-      {% set kws = !input subject_keywords %}
       {% set froms = trigger.event.data.from | join(' ') | lower %}
       {% set subj = trigger.event.data.subject | lower %}
       {{ (senders | select('in', froms) | list | count) > 0
@@ -84,6 +87,6 @@ action:
         sequence:
           - service: "{{ notify_target }}"
             data:
-              title: "📦 Delivery update"
+              title: "Delivery update"
               message: "{{ trigger.event.data.subject }}"
 mode: parallel

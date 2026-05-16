@@ -3,16 +3,23 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry, DeviceEntryType, async_get as async_get_device_registry
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import (
     ATTR_ATTACHMENTS,
@@ -79,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed(str(err)) from err
     except JMAPAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
-    except JMAPError as err:
+    except (JMAPError, UpdateFailed) as err:
         raise ConfigEntryNotReady(str(err)) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
@@ -149,17 +156,17 @@ async def _register_devices(
 def _resolve_coordinator(hass: HomeAssistant, account: str | None) -> JMAPCoordinator:
     entries: dict[str, JMAPCoordinator] = hass.data.get(DOMAIN, {})
     if not entries:
-        raise vol.Invalid("No JMAP accounts configured")
+        raise ServiceValidationError("No JMAP accounts configured")
     if account is None:
         if len(entries) == 1:
             return next(iter(entries.values()))
-        raise vol.Invalid(
+        raise ServiceValidationError(
             "Multiple JMAP accounts configured; pass 'account' to disambiguate"
         )
     for coord in entries.values():
         if coord.entry.title == account or coord.entry.entry_id == account:
             return coord
-    raise vol.Invalid(f"No JMAP account matching '{account}'")
+    raise ServiceValidationError(f"No JMAP account matching '{account}'")
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
@@ -172,7 +179,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         coord = coordinator_for(call)
         identities = await coord.client.list_identities()
         if not identities:
-            raise vol.Invalid("Server returned no identities")
+            raise HomeAssistantError("Server returned no identities")
         identity_id = (
             call.data.get(CONF_IDENTITY_ID)
             or coord.entry.options.get(CONF_IDENTITY_ID)
@@ -190,9 +197,11 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 "name": from_name or ident.get("name") or "",
             }
         attachments = call.data.get(ATTR_ATTACHMENTS) or []
-        attachments = [
-            p for p in attachments if _attachment_path_is_allowed(hass, p)
-        ]
+        for p in attachments:
+            if not _attachment_path_is_allowed(hass, p):
+                raise ServiceValidationError(
+                    f"Attachment '{p}' is outside the config dir or allowlist_external_dirs"
+                )
         result = await coord.client.send_email(
             identity_id=identity_id,
             to=call.data[ATTR_TO],
@@ -234,10 +243,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         if mb_id is None:
             name = call.data.get(ATTR_MAILBOX_NAME)
             if name is None:
-                raise vol.Invalid("mailbox_id or mailbox_name is required")
+                raise ServiceValidationError(
+                    "mailbox_id or mailbox_name is required"
+                )
             mb = await coord.client.find_mailbox_by_name(name)
             if mb is None:
-                raise vol.Invalid(f"No mailbox named '{name}'")
+                raise ServiceValidationError(f"No mailbox named '{name}'")
             mb_id = mb.id
         await coord.client.move(call.data[ATTR_EMAIL_ID], mb_id)
         await coord.async_request_refresh()
@@ -354,7 +365,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
 def _attachment_path_is_allowed(hass: HomeAssistant, path: str) -> bool:
     """Only allow attachments inside the HA config dir or explicitly allowed dirs."""
-    real = os.path.realpath(path)
-    if real.startswith(os.path.realpath(hass.config.path())):
-        return True
-    return any(real.startswith(os.path.realpath(p)) for p in hass.config.allowlist_external_dirs)
+    real = Path(os.path.realpath(path))
+    allowed = [Path(os.path.realpath(hass.config.path()))]
+    allowed.extend(Path(os.path.realpath(p)) for p in hass.config.allowlist_external_dirs)
+    for root in allowed:
+        try:
+            real.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False

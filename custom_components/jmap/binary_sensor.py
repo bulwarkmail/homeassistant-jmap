@@ -3,16 +3,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MONITORED_MAILBOXES, DOMAIN
+from .const import CONF_MONITORED_MAILBOXES, DOMAIN, ROLE_INBOX
 from .coordinator import JMAPCoordinator
 from .jmap_client import Mailbox
 
@@ -26,14 +23,14 @@ async def async_setup_entry(
     monitored = set(entry.options.get(CONF_MONITORED_MAILBOXES) or [])
     entities: list[BinarySensorEntity] = [AccountHasUnreadBinary(coordinator)]
     for mb in coordinator.data["mailboxes"].values():
-        if mb.role == "inbox" or mb.id in monitored:
+        if mb.role == ROLE_INBOX or mb.id in monitored:
             entities.append(MailboxHasUnreadBinary(coordinator, mb.id))
     async_add_entities(entities)
 
 
 class _Base(CoordinatorEntity[JMAPCoordinator], BinarySensorEntity):
     _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.UPDATE
+    _attr_icon = "mdi:email-mark-as-unread"
 
     def __init__(self, coordinator: JMAPCoordinator) -> None:
         super().__init__(coordinator)

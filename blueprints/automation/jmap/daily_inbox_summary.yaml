@@ -34,6 +34,12 @@ blueprint:
       selector:
         number: { min: 1, max: 20, mode: slider }
 
+variables:
+  delivery: !input delivery
+  notify_service: !input notify_service
+  media_player: !input media_player
+  max_emails: !input max_emails
+
 trigger:
   - platform: time
     at: !input summary_time
@@ -42,7 +48,7 @@ action:
   - service: jmap.search
     data:
       query: "is:unread"
-      limit: !input max_emails
+      limit: "{{ max_emails }}"
     response_variable: result
   - variables:
       count: "{{ result.emails | count }}"
@@ -53,20 +59,20 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ (!input delivery) == 'tts' and (!input media_player) != '' }}"
+            value_template: "{{ delivery == 'tts' and media_player != '' }}"
         sequence:
           - service: tts.cloud_say
             data:
-              entity_id: !input media_player
+              entity_id: "{{ media_player }}"
               message: >-
                 You have {{ count }} unread emails. {{ preview }}
       - conditions:
           - condition: template
-            value_template: "{{ (!input delivery) == 'notify' and (!input notify_service) != '' }}"
+            value_template: "{{ delivery == 'notify' and notify_service != '' }}"
         sequence:
-          - service: "{{ !input notify_service }}"
+          - service: "{{ notify_service }}"
             data:
-              title: "📬 {{ count }} unread emails"
+              title: "{{ count }} unread emails"
               message: "{{ preview }}"
 
 mode: single

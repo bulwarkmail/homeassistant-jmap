@@ -7,9 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import section
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
@@ -96,9 +94,12 @@ class JMAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     },
                 )
 
+        form_defaults = None
+        if user_input is not None:
+            form_defaults = {k: v for k, v in user_input.items() if k != CONF_PASSWORD}
         return self.async_show_form(
             step_id="user",
-            data_schema=_user_schema(user_input),
+            data_schema=_user_schema(form_defaults),
             errors=errors,
             description_placeholders={
                 "supported": "Stalwart, Fastmail (via app password), Cyrus, Apache James"

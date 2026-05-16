@@ -25,6 +25,9 @@ from .const import (
     JMAP_CORE_CAPABILITY,
     JMAP_MAIL_CAPABILITY,
     JMAP_SUBMISSION_CAPABILITY,
+    ROLE_ARCHIVE,
+    ROLE_DRAFTS,
+    ROLE_SENT,
     WELL_KNOWN_PATH,
 )
 
@@ -32,6 +35,11 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = ClientTimeout(total=30)
 PUSH_TIMEOUT = ClientTimeout(total=None, sock_read=None, sock_connect=30)
+
+
+def _read_file_bytes(path: str) -> bytes:
+    with open(path, "rb") as fh:
+        return fh.read()
 
 
 class JMAPError(Exception):
@@ -425,8 +433,10 @@ class JMAPClient:
         )
         return [Email.from_dict(e) for e in responses[0][1].get("list") or []]
 
-    async def email_changes(self, since_state: str) -> tuple[str, list[str], list[str]]:
-        """Return (new_state, created_ids, updated_ids) since the given state."""
+    async def email_changes(
+        self, since_state: str
+    ) -> tuple[str, list[str], list[str], list[str]]:
+        """Return (new_state, created_ids, updated_ids, destroyed_ids)."""
         responses = await self.invoke(
             [
                 [
@@ -441,9 +451,12 @@ class JMAPClient:
             ]
         )
         body = responses[0][1]
-        return body.get("newState", since_state), body.get("created") or [], body.get(
-            "updated"
-        ) or []
+        return (
+            body.get("newState", since_state),
+            body.get("created") or [],
+            body.get("updated") or [],
+            body.get("destroyed") or [],
+        )
 
     async def get_state(self) -> str:
         """Return the current Email state token."""
@@ -502,7 +515,7 @@ class JMAPClient:
         )
 
     async def archive(self, email_id: str) -> None:
-        archive_mb = await self.find_mailbox_by_role("archive")
+        archive_mb = await self.find_mailbox_by_role(ROLE_ARCHIVE)
         if archive_mb is None:
             raise JMAPNotFound("No mailbox with role=archive on server")
         await self.move(email_id, archive_mb.id)
@@ -574,16 +587,15 @@ class JMAPClient:
         if identity is None:
             raise JMAPNotFound(f"Identity {identity_id} not found")
 
-        drafts = await self.find_mailbox_by_role("drafts")
-        sent = await self.find_mailbox_by_role("sent")
+        drafts = await self.find_mailbox_by_role(ROLE_DRAFTS)
+        sent = await self.find_mailbox_by_role(ROLE_SENT)
         if drafts is None or sent is None:
             raise JMAPNotFound("Server must expose drafts and sent mailboxes")
 
         attachments_data: list[dict[str, Any]] = []
         body_attachments: list[dict[str, Any]] = []
         for path in attachments or []:
-            with open(path, "rb") as fh:
-                content = fh.read()
+            content = await asyncio.to_thread(_read_file_bytes, path)
             ctype, _ = mimetypes.guess_type(path)
             blob = await self.upload_blob(content, ctype or "application/octet-stream")
             attachments_data.append(

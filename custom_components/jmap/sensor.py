@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MONITORED_MAILBOXES, DOMAIN
+from .const import CONF_MONITORED_MAILBOXES, DOMAIN, ROLE_INBOX
 from .coordinator import JMAPCoordinator
 from .jmap_client import Mailbox
 
@@ -27,7 +27,7 @@ async def async_setup_entry(
         LatestSubjectSensor(coordinator),
     ]
     for mb in coordinator.data["mailboxes"].values():
-        if mb.role in {"inbox"} or mb.id in monitored:
+        if mb.role == ROLE_INBOX or mb.id in monitored:
             entities.append(MailboxUnreadSensor(coordinator, mb.id))
             entities.append(MailboxTotalSensor(coordinator, mb.id))
 
@@ -40,7 +40,7 @@ async def async_setup_entry(
         }
         new: list[SensorEntity] = []
         for mb in coordinator.data["mailboxes"].values():
-            if mb.role not in {"inbox"} and mb.id not in monitored:
+            if mb.role != ROLE_INBOX and mb.id not in monitored:
                 continue
             unique_unread = f"{entry.entry_id}_{mb.id}_unread"
             unique_total = f"{entry.entry_id}_{mb.id}_total"
@@ -118,7 +118,6 @@ class MailboxUnreadSensor(_MailboxSensorBase):
 class MailboxTotalSensor(_MailboxSensorBase):
     _attr_icon = "mdi:email-multiple-outline"
     _attr_native_unit_of_measurement = "messages"
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: JMAPCoordinator, mailbox_id: str) -> None:
