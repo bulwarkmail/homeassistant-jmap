@@ -1,0 +1,154 @@
+send_email:
+  name: Send email
+  description: Send an email via this JMAP account.
+  fields:
+    account:
+      name: Account
+      description: Title of the JMAP config entry; omit if you only have one.
+      example: "you@example.com"
+      selector:
+        text:
+    to:
+      name: To
+      description: One or more recipient addresses.
+      required: true
+      example: "alice@example.com"
+      selector:
+        object:
+    subject:
+      name: Subject
+      required: true
+      example: "Front door is open"
+      selector:
+        text:
+    body:
+      name: Plain-text body
+      example: "The front door has been open for 5 minutes."
+      selector:
+        text:
+          multiline: true
+    html:
+      name: HTML body
+      example: "<p>The front door has been <b>open</b>.</p>"
+      selector:
+        text:
+          multiline: true
+    cc:
+      name: Cc
+      selector:
+        object:
+    bcc:
+      name: Bcc
+      selector:
+        object:
+    reply_to:
+      name: Reply-To
+      selector:
+        object:
+    from_address:
+      name: From address override
+      description: Must be an address on one of your identities.
+      selector:
+        text:
+    attachments:
+      name: Attachments
+      description: List of file paths inside your HA config dir or allowlisted directories.
+      selector:
+        object:
+    headers:
+      name: Custom headers
+      description: Map of header name to value.
+      selector:
+        object:
+    identity_id:
+      name: Identity ID
+      description: Override the JMAP identity used to send.
+      selector:
+        text:
+
+mark_read:
+  name: Mark email as read
+  fields:
+    account: &account_field
+      name: Account
+      selector:
+        text:
+    email_id: &email_id_field
+      name: Email ID
+      required: true
+      selector:
+        text:
+
+mark_unread:
+  name: Mark email as unread
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+
+archive:
+  name: Archive email
+  description: Move email to the mailbox with role=archive.
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+
+delete:
+  name: Delete email
+  description: Permanently delete (use a Trash mailbox + move for soft delete).
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+
+move_to_mailbox:
+  name: Move email
+  description: Move email to a target mailbox; provide either an ID or a name.
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+    mailbox_id:
+      name: Mailbox ID
+      selector:
+        text:
+    mailbox_name:
+      name: Mailbox name
+      example: "Receipts"
+      selector:
+        text:
+
+flag:
+  name: Flag email
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+
+unflag:
+  name: Unflag email
+  fields:
+    account: *account_field
+    email_id: *email_id_field
+
+search:
+  name: Search emails
+  description: Returns a list of matching emails in the service response.
+  fields:
+    account: *account_field
+    query:
+      name: Full-text query
+      selector:
+        text:
+    from_address:
+      name: From address
+      selector:
+        text:
+    mailbox_id:
+      name: Mailbox ID (filter)
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: slider

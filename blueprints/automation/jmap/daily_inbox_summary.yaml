@@ -1,0 +1,72 @@
+blueprint:
+  name: JMAP — Daily inbox summary
+  description: >
+    Read out (or push) a short summary of unread mail at a chosen time.
+  domain: automation
+  input:
+    summary_time:
+      name: Time of day
+      default: "08:00:00"
+      selector:
+        time:
+    delivery:
+      name: Delivery method
+      default: notify
+      selector:
+        select:
+          options:
+            - notify
+            - tts
+    notify_service:
+      name: Notify service (if delivery = notify)
+      default: ""
+      selector:
+        text:
+    media_player:
+      name: Media player (if delivery = tts)
+      default: ""
+      selector:
+        entity:
+          domain: media_player
+    max_emails:
+      name: Max emails to summarize
+      default: 5
+      selector:
+        number: { min: 1, max: 20, mode: slider }
+
+trigger:
+  - platform: time
+    at: !input summary_time
+
+action:
+  - service: jmap.search
+    data:
+      query: "is:unread"
+      limit: !input max_emails
+    response_variable: result
+  - variables:
+      count: "{{ result.emails | count }}"
+      preview: >-
+        {% for e in result.emails -%}
+          {{ e.from_name or e.from[0] }}: {{ e.subject }}.
+        {% endfor %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (!input delivery) == 'tts' and (!input media_player) != '' }}"
+        sequence:
+          - service: tts.cloud_say
+            data:
+              entity_id: !input media_player
+              message: >-
+                You have {{ count }} unread emails. {{ preview }}
+      - conditions:
+          - condition: template
+            value_template: "{{ (!input delivery) == 'notify' and (!input notify_service) != '' }}"
+        sequence:
+          - service: "{{ !input notify_service }}"
+            data:
+              title: "📬 {{ count }} unread emails"
+              message: "{{ preview }}"
+
+mode: single

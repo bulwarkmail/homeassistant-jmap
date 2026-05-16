@@ -1,0 +1,89 @@
+blueprint:
+  name: JMAP — Package delivery alert
+  description: >
+    Flash a light when a delivery / tracking email arrives in your inbox.
+    Matches common sender domains and subject keywords.
+  domain: automation
+  input:
+    light_target:
+      name: Light to flash
+      selector:
+        entity:
+          domain: light
+    flash_color:
+      name: Flash color
+      default: [255, 140, 0]
+      selector:
+        color_rgb:
+    sender_patterns:
+      name: Sender patterns (any match)
+      default:
+        - shipment-tracking@amazon
+        - tracking@dhl
+        - noreply@dpd
+        - track@ups
+        - tracking@fedex
+        - bestellung@hermes
+      selector:
+        object:
+    subject_keywords:
+      name: Subject keywords (any match, case-insensitive)
+      default:
+        - delivered
+        - arriving today
+        - out for delivery
+        - in zustellung
+      selector:
+        object:
+    notify_target:
+      name: Mobile notify service (optional)
+      default: ""
+      selector:
+        text:
+
+trigger:
+  - platform: event
+    event_type: jmap_new_email
+
+condition:
+  - condition: template
+    value_template: >
+      {% set senders = !input sender_patterns %}
+      {% set kws = !input subject_keywords %}
+      {% set froms = trigger.event.data.from | join(' ') | lower %}
+      {% set subj = trigger.event.data.subject | lower %}
+      {{ (senders | select('in', froms) | list | count) > 0
+         or (kws | select('in', subj) | list | count) > 0 }}
+
+action:
+  - service: light.turn_on
+    target:
+      entity_id: !input light_target
+    data:
+      rgb_color: !input flash_color
+      brightness_pct: 100
+  - delay: "00:00:02"
+  - service: light.turn_off
+    target:
+      entity_id: !input light_target
+  - delay: "00:00:01"
+  - service: light.turn_on
+    target:
+      entity_id: !input light_target
+    data:
+      rgb_color: !input flash_color
+      brightness_pct: 100
+  - delay: "00:00:02"
+  - service: light.turn_off
+    target:
+      entity_id: !input light_target
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (notify_target | default('')) != '' }}"
+        sequence:
+          - service: "{{ notify_target }}"
+            data:
+              title: "📦 Delivery update"
+              message: "{{ trigger.event.data.subject }}"
+mode: parallel

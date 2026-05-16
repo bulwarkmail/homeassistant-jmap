@@ -1,0 +1,69 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to JMAP server",
+        "description": "Enter your server URL and either a bearer token (preferred) or username + password.",
+        "data": {
+          "server_url": "Server URL",
+          "token": "Bearer token",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate JMAP",
+        "data": {
+          "token": "Bearer token",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the JMAP server.",
+      "invalid_auth": "Authentication failed."
+    },
+    "abort": {
+      "already_configured": "Account already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "JMAP options",
+        "data": {
+          "poll_interval": "Poll interval (seconds)",
+          "use_push": "Use push (EventSource)",
+          "from_name": "Default From name",
+          "identity_id": "Default identity",
+          "monitored_mailboxes": "Monitored mailboxes"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "mailbox_unread": {"name": "Unread"},
+      "mailbox_total": {"name": "Total"},
+      "latest_sender": {"name": "Latest sender"},
+      "latest_subject": {"name": "Latest subject"}
+    },
+    "binary_sensor": {
+      "account_unread": {"name": "Has unread"},
+      "mailbox_has_unread": {"name": "Has unread"}
+    }
+  },
+  "services": {
+    "send_email": {"name": "Send email"},
+    "mark_read": {"name": "Mark as read"},
+    "mark_unread": {"name": "Mark as unread"},
+    "archive": {"name": "Archive"},
+    "delete": {"name": "Delete"},
+    "move_to_mailbox": {"name": "Move"},
+    "flag": {"name": "Flag"},
+    "unflag": {"name": "Unflag"},
+    "search": {"name": "Search"}
+  }
+}

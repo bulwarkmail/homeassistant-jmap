@@ -1,0 +1,52 @@
+blueprint:
+  name: JMAP — Ring motion email → lights
+  description: >
+    Turn on lights when an emailed motion alert (Ring / Nest / Reolink) lands.
+    Useful for camera systems whose webhook integrations are flaky but whose
+    emails always go through.
+  domain: automation
+  input:
+    light_target:
+      name: Lights to turn on
+      selector:
+        target:
+          entity:
+            domain: light
+    duration:
+      name: How long to keep lights on
+      default: "00:05:00"
+      selector:
+        duration:
+    sender_substring:
+      name: Sender contains
+      default: "ring.com"
+      selector:
+        text:
+    subject_contains:
+      name: Subject contains (case-insensitive)
+      default: "motion"
+      selector:
+        text:
+
+trigger:
+  - platform: event
+    event_type: jmap_new_email
+
+condition:
+  - condition: template
+    value_template: >
+      {% set f = trigger.event.data.from | join(' ') | lower %}
+      {% set s = trigger.event.data.subject | lower %}
+      {{ (!input sender_substring) | lower in f
+         and (!input subject_contains) | lower in s }}
+
+action:
+  - service: light.turn_on
+    target: !input light_target
+    data:
+      brightness_pct: 100
+  - delay: !input duration
+  - service: light.turn_off
+    target: !input light_target
+
+mode: restart
