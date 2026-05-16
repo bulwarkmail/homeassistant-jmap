@@ -1,7 +1,5 @@
 {
   "name": "JMAP Mail",
-  "render_readme": true,
   "homeassistant": "2024.6.0",
-  "country": ["DE", "US", "GB", "NL"],
-  "zip_release": false
+  "render_readme": true
 }

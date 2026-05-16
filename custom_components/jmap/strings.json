@@ -56,14 +56,92 @@
     }
   },
   "services": {
-    "send_email": {"name": "Send email"},
-    "mark_read": {"name": "Mark as read"},
-    "mark_unread": {"name": "Mark as unread"},
-    "archive": {"name": "Archive"},
-    "delete": {"name": "Delete"},
-    "move_to_mailbox": {"name": "Move"},
-    "flag": {"name": "Flag"},
-    "unflag": {"name": "Unflag"},
-    "search": {"name": "Search"}
+    "send_email": {
+      "name": "Send email",
+      "description": "Send an email via this JMAP account.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "to": {"name": "To", "description": "One or more recipient addresses."},
+        "subject": {"name": "Subject", "description": "Email subject line."},
+        "body": {"name": "Plain-text body", "description": "Plain-text body of the email."},
+        "html": {"name": "HTML body", "description": "HTML body of the email."},
+        "cc": {"name": "Cc", "description": "Carbon-copy recipients."},
+        "bcc": {"name": "Bcc", "description": "Blind carbon-copy recipients."},
+        "reply_to": {"name": "Reply-To", "description": "Reply-To addresses."},
+        "from_address": {"name": "From address override", "description": "Must be an address on one of your identities."},
+        "attachments": {"name": "Attachments", "description": "List of file paths inside your HA config dir or allowlisted directories."},
+        "headers": {"name": "Custom headers", "description": "Map of header name to value."},
+        "identity_id": {"name": "Identity ID", "description": "Override the JMAP identity used to send."}
+      }
+    },
+    "mark_read": {
+      "name": "Mark as read",
+      "description": "Mark an email as read.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "mark_unread": {
+      "name": "Mark as unread",
+      "description": "Mark an email as unread.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "archive": {
+      "name": "Archive",
+      "description": "Move email to the mailbox with role=archive.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "delete": {
+      "name": "Delete",
+      "description": "Permanently delete (use a Trash mailbox + move for soft delete).",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "move_to_mailbox": {
+      "name": "Move",
+      "description": "Move email to a target mailbox; provide either an ID or a name.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."},
+        "mailbox_id": {"name": "Mailbox ID", "description": "Target mailbox id."},
+        "mailbox_name": {"name": "Mailbox name", "description": "Target mailbox name (used if no id is given)."}
+      }
+    },
+    "flag": {
+      "name": "Flag",
+      "description": "Set the $flagged keyword on an email.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "unflag": {
+      "name": "Unflag",
+      "description": "Clear the $flagged keyword on an email.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email."}
+      }
+    },
+    "search": {
+      "name": "Search",
+      "description": "Returns a list of matching emails in the service response.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "query": {"name": "Full-text query", "description": "Text to search across the account."},
+        "from_address": {"name": "From address", "description": "Filter by sender address."},
+        "mailbox_id": {"name": "Mailbox ID (filter)", "description": "Restrict to a specific mailbox."},
+        "limit": {"name": "Limit", "description": "Maximum number of results."}
+      }
+    }
   }
 }
