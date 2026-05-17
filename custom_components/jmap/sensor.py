@@ -157,22 +157,22 @@ class LatestSenderSensor(_JMAPSensorBase):
     def device_info(self) -> dict[str, Any]:
         return {"identifiers": {(DOMAIN, self._entry_id)}}
 
+    def _latest(self) -> Any:
+        data = self.coordinator.data or {}
+        latest = data.get("latest_inbox") or data.get("latest_unread") or []
+        return latest[0] if latest else None
+
     @property
     def native_value(self) -> str | None:
-        latest = (self.coordinator.data or {}).get("latest_unread") or []
-        if not latest:
+        email = self._latest()
+        if email is None or not email.from_:
             return None
-        email = latest[0]
-        if email.from_:
-            return email.from_[0].name or email.from_[0].email
-        return None
+        return email.from_[0].name or email.from_[0].email
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        latest = (self.coordinator.data or {}).get("latest_unread") or []
-        if not latest:
-            return None
-        return latest[0].to_event_payload()
+        email = self._latest()
+        return email.to_event_payload() if email else None
 
 
 class LatestSubjectSensor(_JMAPSensorBase):
@@ -190,5 +190,6 @@ class LatestSubjectSensor(_JMAPSensorBase):
 
     @property
     def native_value(self) -> str | None:
-        latest = (self.coordinator.data or {}).get("latest_unread") or []
+        data = self.coordinator.data or {}
+        latest = data.get("latest_inbox") or data.get("latest_unread") or []
         return latest[0].subject if latest else None

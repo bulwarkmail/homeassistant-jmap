@@ -157,17 +157,20 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._fire_events(new_emails, destroyed_ids, mailboxes)
 
             latest_unread: list[Email] = []
+            latest_inbox: list[Email] = []
             inbox = next(
                 (mb for mb in mailboxes.values() if mb.role == ROLE_INBOX), None
             )
             if inbox is not None:
-                latest_unread = await self.client.query_emails(
-                    mailbox_id=inbox.id, unread_only=True, limit=10
+                latest_inbox = await self.client.query_emails(
+                    mailbox_id=inbox.id, limit=10
                 )
+                latest_unread = [e for e in latest_inbox if e.is_unread]
 
             return {
                 "mailboxes": mailboxes,
                 "latest_unread": latest_unread,
+                "latest_inbox": latest_inbox,
                 "state": self._email_state,
             }
         except JMAPAuthError as err:
@@ -236,8 +239,9 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             async for payload in self.client.event_source():
                 changed = payload.get("changed") or {}
                 if not changed:
+                    _LOGGER.debug("JMAP push: keepalive %s", payload)
                     continue
-                _LOGGER.debug("JMAP push event: %s", changed)
+                _LOGGER.info("JMAP push event, refreshing: %s", list(changed.keys()))
                 # async_refresh bypasses the 10s debouncer so push is actually instant.
                 await self.async_refresh()
         except asyncio.CancelledError:

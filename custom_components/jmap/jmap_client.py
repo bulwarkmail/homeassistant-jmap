@@ -795,7 +795,17 @@ class JMAPClient:
                     if resp.status in (401, 403):
                         raise JMAPAuthError(f"Event source returned {resp.status}")
                     resp.raise_for_status()
+                    content_type = (resp.headers.get("Content-Type") or "").lower()
+                    if "text/event-stream" not in content_type:
+                        _LOGGER.warning(
+                            "JMAP push URL %s returned Content-Type=%r (expected "
+                            "text/event-stream); push may not work",
+                            url,
+                            content_type,
+                        )
+                    _LOGGER.info("JMAP push channel connected: %s", url)
                     backoff = 1.0
+                    event_count = 0
                     event_type: str | None = None
                     data_buf: list[str] = []
                     async for raw in resp.content:
@@ -804,11 +814,24 @@ class JMAPClient:
                             if data_buf:
                                 payload = "\n".join(data_buf)
                                 data_buf = []
-                                if event_type in (None, "state"):
+                                # Accept any event type that's plausibly a state change:
+                                # spec says "state", some servers omit the event line.
+                                if event_type in (None, "", "state", "message"):
                                     try:
-                                        yield json.loads(payload)
+                                        decoded = json.loads(payload)
                                     except json.JSONDecodeError:
-                                        _LOGGER.debug("Bad SSE payload: %s", payload)
+                                        _LOGGER.warning("Bad SSE payload: %s", payload[:200])
+                                    else:
+                                        event_count += 1
+                                        if event_count == 1:
+                                            _LOGGER.info(
+                                                "JMAP push: first event received"
+                                            )
+                                        yield decoded
+                                else:
+                                    _LOGGER.debug(
+                                        "JMAP push: ignoring event type %r", event_type
+                                    )
                                 event_type = None
                             continue
                         if line.startswith(":"):
@@ -817,6 +840,10 @@ class JMAPClient:
                             event_type = line[6:].strip()
                         elif line.startswith("data:"):
                             data_buf.append(line[5:].lstrip())
+                    _LOGGER.info(
+                        "JMAP push stream closed by server after %d event(s); reconnecting",
+                        event_count,
+                    )
             except (ClientError, asyncio.TimeoutError) as err:
                 _LOGGER.warning(
                     "JMAP event source disconnected (%s); reconnecting in %.1fs",
