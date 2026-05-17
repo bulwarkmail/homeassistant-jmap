@@ -39,6 +39,7 @@ from .const import (
     ATTR_TO,
     CONF_FROM_NAME,
     CONF_IDENTITY_ID,
+    CONF_MONITORED_MAILBOXES,
     CONF_PASSWORD,
     CONF_SERVER_URL,
     CONF_TOKEN,
@@ -46,6 +47,7 @@ from .const import (
     CONF_VERIFY_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    ROLE_INBOX,
     SERVICE_ARCHIVE,
     SERVICE_DELETE,
     SERVICE_FLAG,
@@ -142,7 +144,12 @@ async def _register_devices(
         entry_type=DeviceEntryType.SERVICE,
     )
     mailboxes = coordinator.data["mailboxes"]
+    monitored = set(entry.options.get(CONF_MONITORED_MAILBOXES) or [])
+    wanted_ids: set[str] = set()
     for mb in mailboxes.values():
+        if mb.role != ROLE_INBOX and mb.id not in monitored:
+            continue
+        wanted_ids.add(mb.id)
         path = mailbox_path(mb, mailboxes)
         registry.async_get_or_create(
             config_entry_id=entry.entry_id,
@@ -153,6 +160,24 @@ async def _register_devices(
             model=f"Mailbox ({mb.role or 'folder'})",
             entry_type=DeviceEntryType.SERVICE,
         )
+
+    # Remove devices left over from a previous setup that registered every mailbox.
+    account_identifier = (DOMAIN, entry.entry_id)
+    for device in list(registry.devices.values()):
+        if entry.entry_id not in device.config_entries:
+            continue
+        if account_identifier in device.identifiers:
+            continue
+        keep = False
+        for domain, ident in device.identifiers:
+            if domain != DOMAIN or ":" not in ident:
+                continue
+            _, mb_id = ident.split(":", 1)
+            if mb_id in wanted_ids:
+                keep = True
+                break
+        if not keep:
+            registry.async_remove_device(device.id)
 
 
 def _resolve_coordinator(hass: HomeAssistant, account: str | None) -> JMAPCoordinator:
