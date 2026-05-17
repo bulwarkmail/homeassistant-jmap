@@ -15,7 +15,7 @@ import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import aiohttp
 from aiohttp import ClientError, ClientResponseError, ClientTimeout
@@ -228,6 +228,29 @@ class JMAPClient:
             return self._server_url
         return self._server_url + WELL_KNOWN_PATH
 
+    def _rewrite_to_origin(self, url: str, origin_url: str) -> str:
+        """Force `url` onto the same scheme://host[:port] as `origin_url`.
+
+        Some JMAP servers advertise internal URLs (e.g. :8080) in the session
+        document even though they're only externally reachable on a different
+        port via a reverse proxy. Re-anchor everything onto the origin the
+        client actually reached.
+        """
+        if not url:
+            return url
+        try:
+            parsed = urlsplit(url)
+            origin = urlsplit(origin_url)
+        except ValueError:
+            return url
+        if not parsed.netloc:
+            return url
+        if (parsed.scheme, parsed.netloc) == (origin.scheme, origin.netloc):
+            return url
+        return urlunsplit(
+            (origin.scheme, origin.netloc, parsed.path, parsed.query, parsed.fragment)
+        )
+
     async def connect(self) -> JMAPSession:
         """Fetch the JMAP session resource and cache it."""
         headers = self._auth_header()
@@ -256,12 +279,23 @@ class JMAPClient:
         if not primary:
             raise JMAPError("Server does not advertise a primary mail account")
 
+        api_url = self._rewrite_to_origin(urljoin(url, data["apiUrl"]), url)
+        download_url = self._rewrite_to_origin(
+            urljoin(url, data.get("downloadUrl", "")), url
+        )
+        upload_url = self._rewrite_to_origin(
+            urljoin(url, data.get("uploadUrl", "")), url
+        )
+        event_source_url = self._rewrite_to_origin(
+            urljoin(url, data.get("eventSourceUrl", "")), url
+        )
+
         self._session = JMAPSession(
             username=data.get("username", ""),
-            api_url=urljoin(url, data["apiUrl"]),
-            download_url=urljoin(url, data.get("downloadUrl", "")),
-            upload_url=urljoin(url, data.get("uploadUrl", "")),
-            event_source_url=urljoin(url, data.get("eventSourceUrl", "")),
+            api_url=api_url,
+            download_url=download_url,
+            upload_url=upload_url,
+            event_source_url=event_source_url,
             primary_account_id=primary,
             submission_account_id=(data.get("primaryAccounts") or {}).get(
                 JMAP_SUBMISSION_CAPABILITY
