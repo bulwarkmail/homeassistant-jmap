@@ -752,6 +752,23 @@ class JMAPClient:
         return submission_resp[1]
 
     @staticmethod
+    def _build_event_source_url(template: str) -> str:
+        """Apply RFC 8620 URL template substitution, falling back to query params."""
+        has_template = (
+            "{types}" in template
+            or "{closeafter}" in template
+            or "{ping}" in template
+        )
+        if has_template:
+            return (
+                template.replace("{types}", "*")
+                .replace("{closeafter}", "no")
+                .replace("{ping}", "30")
+            )
+        sep = "&" if "?" in template else "?"
+        return f"{template}{sep}types=*&closeafter=no&ping=30"
+
+    @staticmethod
     def _normalize_address(addr: str | Mapping[str, str]) -> dict[str, str]:
         if isinstance(addr, str):
             return {"email": addr}
@@ -762,11 +779,7 @@ class JMAPClient:
         sess = self.session
         if not sess.event_source_url:
             raise JMAPError("Server does not advertise an eventSourceUrl")
-        url = sess.event_source_url
-        if "?" in url:
-            url += "&types=*&closeafter=no&ping=300"
-        else:
-            url += "?types=*&closeafter=no&ping=300"
+        url = self._build_event_source_url(sess.event_source_url)
         headers = self._auth_header()
         headers["Accept"] = "text/event-stream"
 

@@ -231,14 +231,15 @@ class JMAPCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
 
     async def _run_push_loop(self) -> None:
-        """Drive an EventSource subscription that nudges the coordinator on change."""
+        """Drive an EventSource subscription that refreshes the coordinator on change."""
         try:
             async for payload in self.client.event_source():
                 changed = payload.get("changed") or {}
                 if not changed:
                     continue
                 _LOGGER.debug("JMAP push event: %s", changed)
-                await self.async_request_refresh()
+                # async_refresh bypasses the 10s debouncer so push is actually instant.
+                await self.async_refresh()
         except asyncio.CancelledError:
             raise
         except JMAPAuthError as err:
