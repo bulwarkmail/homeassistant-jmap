@@ -10,12 +10,16 @@ SMTP relay required.
 - **Push** via JMAP EventSource. Falls back to polling automatically.
 - **Send mail** through HA's `notify` entity or the `jmap.send_email` service,
   including HTML, CC/BCC, custom headers, and attachments.
-- **Sensors** for unread/total per mailbox, latest sender, latest subject.
+- **Sensors** for unread/total per mailbox, latest sender, latest subject. Names
+  reflect the full mailbox path (e.g. `Inbox > Promotions > Travel unread`).
 - **Binary sensors** for "has unread" per account and per mailbox.
 - **Triggers** via the `jmap_new_email`, `jmap_email_deleted`, and
   `jmap_mailbox_changed` events.
 - **Services** to mark read/unread, flag, archive, move, delete, search.
 - **Multi-account** — add more than one entry, each is its own device.
+- **Reverse-proxy friendly** — session URLs are re-anchored to the origin you
+  actually connected to, so a server that advertises an internal `:8080` API
+  URL still works when you reach it via `https://mail.example.com`.
 - **Diagnostics** with credentials redacted.
 
 ## Install
@@ -37,18 +41,19 @@ and restart.
 You'll need:
 
 - **Server URL** — usually the base URL of your mail server. The integration
-  will probe `/.well-known/jmap` if you give it a bare hostname.
-- **Bearer token** *or* **username + password**. Bearer tokens are preferred for
-  Stalwart and Fastmail (use an *app password*).
+  will probe `/.well-known/jmap` if you give it a bare hostname. You can also
+  paste the full session URL directly (e.g.
+  `https://mail.example.com/.well-known/jmap`).
+- **Bearer token** *or* **username + password**. Bearer tokens are preferred
+  where supported; for Fastmail use an *app password*.
 
-Tested against:
+Once added, open **Configure** on the integration to:
 
-| Server | Auth | Push | Submission |
-|---|---|---|---|
-| Stalwart 0.10+ | Bearer / Basic | yes | yes |
-| Fastmail | App password (Basic) | yes | yes |
-| Cyrus (3.10) | Basic | yes | yes |
-| Apache James | Basic | partial | yes |
+- Change the poll interval and toggle push.
+- Set a default From name and identity.
+- Pick **additional mailboxes** to expose as devices/sensors. Only the inbox
+  and the mailboxes you select here will get unread/total/has-unread entities;
+  everything else stays out of the UI until you opt in.
 
 ## Use it
 
@@ -155,6 +160,14 @@ received_at: "2026-05-17T08:14:02Z"
 has_attachment: false
 is_unread: true
 is_flagged: false
+```
+
+### `jmap_email_deleted`
+
+```yaml
+account: "you@example.com"
+entry_id: "01HX..."
+email_id: "M..."
 ```
 
 ### `jmap_mailbox_changed`
