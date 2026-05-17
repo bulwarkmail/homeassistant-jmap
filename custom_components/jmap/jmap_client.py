@@ -95,6 +95,25 @@ class Mailbox:
     sort_order: int = 0
 
 
+def mailbox_path(
+    mailbox: Mailbox,
+    mailboxes: Mapping[str, Mailbox],
+    separator: str = " > ",
+) -> str:
+    """Return the full hierarchical name of a mailbox, e.g. 'Inbox > Travel'."""
+    parts: list[str] = [mailbox.name]
+    seen: set[str] = {mailbox.id}
+    current = mailbox
+    while current.parent_id and current.parent_id not in seen:
+        parent = mailboxes.get(current.parent_id)
+        if parent is None:
+            break
+        parts.append(parent.name)
+        seen.add(parent.id)
+        current = parent
+    return separator.join(reversed(parts))
+
+
 @dataclass
 class EmailAddress:
     """JMAP EmailAddress."""

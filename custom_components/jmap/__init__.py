@@ -57,7 +57,7 @@ from .const import (
     SERVICE_UNFLAG,
 )
 from .coordinator import ConfigEntryAuthFailedShim, JMAPCoordinator
-from .jmap_client import JMAPAuthError, JMAPClient, JMAPError
+from .jmap_client import JMAPAuthError, JMAPClient, JMAPError, mailbox_path
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -141,12 +141,14 @@ async def _register_devices(
         configuration_url=server_url,
         entry_type=DeviceEntryType.SERVICE,
     )
-    for mb in coordinator.data["mailboxes"].values():
+    mailboxes = coordinator.data["mailboxes"]
+    for mb in mailboxes.values():
+        path = mailbox_path(mb, mailboxes)
         registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, f"{entry.entry_id}:{mb.id}")},
             via_device=(DOMAIN, entry.entry_id),
-            name=f"{entry.title} · {mb.name}",
+            name=f"{entry.title} > {path}",
             manufacturer="JMAP",
             model=f"Mailbox ({mb.role or 'folder'})",
             entry_type=DeviceEntryType.SERVICE,

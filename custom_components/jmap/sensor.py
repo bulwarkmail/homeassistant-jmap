@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_MONITORED_MAILBOXES, DOMAIN, ROLE_INBOX
 from .coordinator import JMAPCoordinator
-from .jmap_client import Mailbox
+from .jmap_client import Mailbox, mailbox_path
 
 
 async def async_setup_entry(
@@ -73,6 +73,13 @@ class _MailboxSensorBase(_JMAPSensorBase):
         return (self.coordinator.data or {}).get("mailboxes", {}).get(self._mailbox_id)
 
     @property
+    def _mailbox_path(self) -> str | None:
+        mb = self._mailbox
+        if mb is None:
+            return None
+        return mailbox_path(mb, (self.coordinator.data or {}).get("mailboxes", {}))
+
+    @property
     def available(self) -> bool:
         return super().available and self._mailbox is not None
 
@@ -88,6 +95,7 @@ class _MailboxSensorBase(_JMAPSensorBase):
         return {
             "mailbox_id": mb.id,
             "mailbox_name": mb.name,
+            "mailbox_path": self._mailbox_path,
             "role": mb.role,
             "total_threads": mb.total_threads,
             "unread_threads": mb.unread_threads,
@@ -106,8 +114,8 @@ class MailboxUnreadSensor(_MailboxSensorBase):
 
     @property
     def name(self) -> str:
-        mb = self._mailbox
-        return f"{mb.name} unread" if mb else "Unread"
+        path = self._mailbox_path
+        return f"{path} unread" if path else "Unread"
 
     @property
     def native_value(self) -> int | None:
@@ -127,8 +135,8 @@ class MailboxTotalSensor(_MailboxSensorBase):
 
     @property
     def name(self) -> str:
-        mb = self._mailbox
-        return f"{mb.name} total" if mb else "Total"
+        path = self._mailbox_path
+        return f"{path} total" if path else "Total"
 
     @property
     def native_value(self) -> int | None:

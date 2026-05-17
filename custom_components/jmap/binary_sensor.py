@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_MONITORED_MAILBOXES, DOMAIN, ROLE_INBOX
 from .coordinator import JMAPCoordinator
-from .jmap_client import Mailbox
+from .jmap_client import Mailbox, mailbox_path
 
 
 async def async_setup_entry(
@@ -72,7 +72,10 @@ class MailboxHasUnreadBinary(_Base):
     @property
     def name(self) -> str:
         mb = self._mailbox
-        return f"{mb.name} has unread" if mb else "Has unread"
+        if mb is None:
+            return "Has unread"
+        path = mailbox_path(mb, (self.coordinator.data or {}).get("mailboxes", {}))
+        return f"{path} has unread"
 
     @property
     def is_on(self) -> bool:
