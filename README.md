@@ -2,7 +2,7 @@
 
 A first-class Home Assistant integration for any [JMAP](https://jmap.io) server
 (Stalwart, Fastmail, Cyrus, Apache James, …). JMAP's native push channel means
-new-mail events arrive in HA within a second or two — no IMAP IDLE polling, no
+new-mail events arrive in HA within a second or two, with no IMAP IDLE polling and no
 SMTP relay required.
 
 ## What you get
@@ -187,7 +187,7 @@ Three drop-in blueprints ship in [`blueprints/`](./blueprints):
 ## Permissions
 
 Attachments are restricted to paths under `config/` or any directory you've
-added to `homeassistant.allowlist_external_dirs` — the same rules HA uses for
+added to `homeassistant.allowlist_external_dirs`, the same rules HA uses for
 `shell_command` and `notify.smtp`.
 
 ## Limitations
