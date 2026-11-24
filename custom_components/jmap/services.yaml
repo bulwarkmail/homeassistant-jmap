@@ -152,3 +152,10 @@ search:
           min: 1
           max: 200
           mode: slider
+
+get_email:
+  name: Get email
+  description: Returns one email with its body as text and HTML in the service response.
+  fields:
+    account: *account_field
+    email_id: *email_id_field

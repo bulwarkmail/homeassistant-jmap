@@ -15,7 +15,8 @@ SMTP relay required.
 - **Binary sensors** for "has unread" per account and per mailbox.
 - **Triggers** via the `jmap_new_email`, `jmap_email_deleted`, and
   `jmap_mailbox_changed` events.
-- **Services** to mark read/unread, flag, archive, move, delete, search.
+- **Services** to mark read/unread, flag, archive, move, delete, search, and to
+  read a mail's full body.
 - **Multi-account** — add more than one entry, each is its own device.
 - **Reverse-proxy friendly** — session URLs are re-anchored to the origin you
   actually connected to, so a server that advertises an internal `:8080` API
@@ -81,6 +82,46 @@ automation:
         data:
           message: "Ring: {{ trigger.event.data.subject }}"
 ```
+
+### Read the body of a new mail
+
+Events and sensors carry only the preview, up to 256 characters. For
+the whole body, call `jmap.get_email` with the mail's id. It returns the fields
+of the event plus `text`, `html` and `truncated`:
+
+- `text`: the plain-text body. A mail that only has HTML gets that HTML turned
+  into text.
+- `html`: the HTML body, empty when the mail has none.
+- `truncated`: true when a body was longer than 65,536 characters and was cut.
+
+The body only goes into the service response, so it never lands in the
+recorder database the way state attributes and events do.
+
+```yaml
+automation:
+  - alias: "Parcel tracking number from UPS mail"
+    trigger:
+      - platform: event
+        event_type: jmap_new_email
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.from | select('search', 'ups') | list | count > 0 }}"
+    action:
+      - service: jmap.get_email
+        data:
+          email_id: "{{ trigger.event.data.email_id }}"
+        response_variable: mail
+      - variables:
+          tracking: "{{ mail.text | regex_findall('1Z[0-9A-Z]{16}') | first | default('') }}"
+      - condition: template
+        value_template: "{{ tracking != '' }}"
+      - service: notify.mobile_app_pixel
+        data:
+          message: "UPS parcel {{ tracking }} is on its way"
+```
+
+With more than one account, pass `account` too, for example
+`account: "{{ trigger.event.data.account }}"`.
 
 ### Send a notification *as* email
 

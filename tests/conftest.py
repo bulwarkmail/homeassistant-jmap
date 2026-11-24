@@ -22,6 +22,42 @@ def event_loop():
     loop.close()
 
 
+_BODY_PROPERTIES = ("textBody", "htmlBody", "bodyValues")
+
+
+def _email_for_get(email: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
+    """An email as Email/get returns it: body properties only when asked for,
+    body values only for the fetch flags given, cut at maxBodyValueBytes."""
+    properties = args.get("properties") or []
+    out = {k: v for k, v in email.items() if k not in _BODY_PROPERTIES}
+    for key in ("textBody", "htmlBody"):
+        if key in properties:
+            out[key] = email.get(key) or []
+    if "bodyValues" not in properties:
+        return out
+    wanted: set[str] = set()
+    if args.get("fetchTextBodyValues"):
+        wanted.update(p["partId"] for p in email.get("textBody") or [])
+    if args.get("fetchHTMLBodyValues"):
+        wanted.update(p["partId"] for p in email.get("htmlBody") or [])
+    limit = args.get("maxBodyValueBytes") or 0
+    values: dict[str, Any] = {}
+    for part_id, value in (email.get("bodyValues") or {}).items():
+        if part_id not in wanted:
+            continue
+        raw = value.encode()
+        cut = bool(limit) and len(raw) > limit
+        if cut:
+            raw = raw[:limit]
+        values[part_id] = {
+            "value": raw.decode(errors="ignore"),
+            "isTruncated": cut,
+            "isEncodingProblem": False,
+        }
+    out["bodyValues"] = values
+    return out
+
+
 @pytest.fixture
 async def fake_jmap_server(aiohttp_server):
     """A tiny in-process JMAP server that satisfies our client."""
@@ -179,7 +215,7 @@ async def fake_jmap_server(aiohttp_server):
                             "accountId": "acct1",
                             "state": state["email_state"],
                             "list": [
-                                state["emails"][i]
+                                _email_for_get(state["emails"][i], args)
                                 for i in ids
                                 if i in state["emails"]
                             ],

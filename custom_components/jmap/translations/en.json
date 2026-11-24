@@ -142,6 +142,14 @@
         "mailbox_id": {"name": "Mailbox ID (filter)", "description": "Restrict to a specific mailbox."},
         "limit": {"name": "Limit", "description": "Maximum number of results."}
       }
+    },
+    "get_email": {
+      "name": "Get email",
+      "description": "Returns one email with its body as text and HTML in the service response.",
+      "fields": {
+        "account": {"name": "Account", "description": "Title of the JMAP config entry; omit if you only have one."},
+        "email_id": {"name": "Email ID", "description": "JMAP id of the email, such as the email_id of a jmap_new_email event."}
+      }
     }
   }
 }

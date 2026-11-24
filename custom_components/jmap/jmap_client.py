@@ -12,8 +12,10 @@ import json
 import logging
 import mimetypes
 import os
+import re
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -40,6 +42,57 @@ PUSH_TIMEOUT = ClientTimeout(total=None, sock_read=None, sock_connect=30)
 def _read_file_bytes(path: str) -> bytes:
     with open(path, "rb") as fh:
         return fh.read()
+
+
+class _TextExtractor(HTMLParser):
+    """Collects the visible text of an HTML body, a line break per block."""
+
+    _SKIP = {"script", "style", "title", "template"}
+    _BLOCK = {
+        "br", "p", "div", "tr", "li", "table", "ul", "ol", "blockquote",
+        "h1", "h2", "h3", "h4", "h5", "h6", "hr", "section", "article",
+    }
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._out: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIP:
+            self._skip_depth += 1
+        elif tag in self._BLOCK:
+            self._out.append("\n")
+        elif tag in ("td", "th"):
+            self._out.append(" ")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # <br/> is one line break, not an opening and a closing one; an empty
+        # <script/> hides nothing.
+        if tag not in self._SKIP:
+            self.handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag in self._BLOCK:
+            self._out.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self._out.append(re.sub(r"\s+", " ", data))
+
+    def text(self) -> str:
+        lines = (line.strip() for line in "".join(self._out).split("\n"))
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def html_to_text(html: str) -> str:
+    """Return the visible text of an HTML document."""
+    parser = _TextExtractor()
+    parser.feed(html)
+    parser.close()
+    return parser.text()
 
 
 class JMAPError(Exception):
@@ -485,6 +538,74 @@ class JMAPClient:
             ]
         )
         return [Email.from_dict(e) for e in responses[0][1].get("list") or []]
+
+    async def get_email_with_body(
+        self, email_id: str, max_chars: int
+    ) -> dict[str, Any] | None:
+        """Return one email's fields plus its body as text and HTML, or None.
+
+        `text` is the plain-text body; a message that only has HTML gets that
+        HTML turned into text. `html` is the HTML body, empty when the message
+        has none. Each is cut to `max_chars`, and `truncated` says whether
+        anything was cut.
+        """
+        responses = await self.invoke(
+            [
+                [
+                    "Email/get",
+                    {
+                        "accountId": self.session.primary_account_id,
+                        "ids": [email_id],
+                        "properties": [
+                            *EMAIL_PROPERTIES,
+                            "textBody",
+                            "htmlBody",
+                            "bodyValues",
+                        ],
+                        "fetchTextBodyValues": True,
+                        "fetchHTMLBodyValues": True,
+                        # Bytes for the server, chars here: a cut value is
+                        # never longer than max_chars characters.
+                        "maxBodyValueBytes": max_chars,
+                    },
+                    self._next_id(),
+                ]
+            ]
+        )
+        found = responses[0][1].get("list") or []
+        if not found:
+            return None
+        data = found[0]
+        values: Mapping[str, Any] = data.get("bodyValues") or {}
+        truncated = False
+
+        def joined(parts: list[Mapping[str, Any]] | None, want_html: bool) -> str:
+            nonlocal truncated
+            out: list[str] = []
+            for part in parts or []:
+                value = values.get(part.get("partId") or "")
+                if not value:
+                    continue
+                is_html = (part.get("type") or "").lower() == "text/html"
+                if want_html and not is_html:
+                    continue
+                truncated = truncated or bool(value.get("isTruncated"))
+                body = value.get("value") or ""
+                out.append(body if want_html or not is_html else html_to_text(body))
+            return "\n\n".join(s.strip("\n") for s in out if s.strip())
+
+        text = joined(data.get("textBody"), want_html=False)
+        html = joined(data.get("htmlBody"), want_html=True)
+        if len(text) > max_chars:
+            text, truncated = text[:max_chars], True
+        if len(html) > max_chars:
+            html, truncated = html[:max_chars], True
+        return {
+            **Email.from_dict(data).to_event_payload(),
+            "text": text,
+            "html": html,
+            "truncated": truncated,
+        }
 
     async def email_changes(
         self, since_state: str

@@ -34,6 +34,12 @@ SERVICE_MOVE: Final = "move_to_mailbox"
 SERVICE_SEARCH: Final = "search"
 SERVICE_FLAG: Final = "flag"
 SERVICE_UNFLAG: Final = "unflag"
+SERVICE_GET_EMAIL: Final = "get_email"
+
+# Most of the body that jmap.get_email returns, per text and per HTML. The body
+# only goes into a service response, never into state attributes or events,
+# which the recorder writes to its database on every change.
+MAX_BODY_CHARS: Final = 65536
 
 ATTR_TO: Final = "to"
 ATTR_CC: Final = "cc"

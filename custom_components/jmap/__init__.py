@@ -47,10 +47,12 @@ from .const import (
     CONF_VERIFY_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    MAX_BODY_CHARS,
     ROLE_INBOX,
     SERVICE_ARCHIVE,
     SERVICE_DELETE,
     SERVICE_FLAG,
+    SERVICE_GET_EMAIL,
     SERVICE_MARK_READ,
     SERVICE_MARK_UNREAD,
     SERVICE_MOVE,
@@ -119,6 +121,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_FLAG,
             SERVICE_UNFLAG,
             SERVICE_SEARCH,
+            SERVICE_GET_EMAIL,
         ):
             hass.services.async_remove(DOMAIN, service)
     return unload_ok
@@ -300,6 +303,14 @@ def _async_register_services(hass: HomeAssistant) -> None:
         )
         return {"emails": [e.to_event_payload() for e in emails]}
 
+    async def get_email(call: ServiceCall) -> ServiceResponse:
+        coord = coordinator_for(call)
+        email_id = call.data[ATTR_EMAIL_ID]
+        email = await coord.client.get_email_with_body(email_id, MAX_BODY_CHARS)
+        if email is None:
+            raise ServiceValidationError(f"No email with id '{email_id}'")
+        return email
+
     base = {vol.Optional("account"): cv.string}
 
     schemas: dict[str, tuple[Any, Any, SupportsResponse]] = {
@@ -378,6 +389,11 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 }
             ),
             search,
+            SupportsResponse.ONLY,
+        ),
+        SERVICE_GET_EMAIL: (
+            vol.Schema({**base, vol.Required(ATTR_EMAIL_ID): cv.string}),
+            get_email,
             SupportsResponse.ONLY,
         ),
     }
